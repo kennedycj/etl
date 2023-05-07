@@ -25,47 +25,8 @@ print("Opened database successfully")
 cur = conn.cursor()
 
 # Create the database schema
-# Iterate through each MS Excel sheet to create corresponding schema.Table and schema.Column objects
 database = schema.Database()
-for key in raw:
-
-    table_name = schema.Table.standardize(key)
-
-    # Store cleaned and original table name in Table
-    table = schema.Table(table_name)
-    table.alias = key
-    columns = []
-    column_names = []
-    for column in raw[key].columns:
-
-        candidate_keys = []
-
-        dtype = raw[key].iloc[1:][column].dtypes
-        s_column = schema.Column(schema.Column.standardize(raw[key].iloc[0][column]))
-
-        if len(raw[key][column]) == len(raw[key][column].unique()):
-            candidate_keys.append(s_column.name)
-
-        if dtype == 'float64':
-            s_column.data_type = "DOUBLE PRECISION"
-        elif dtype == 'int64':
-            s_column.data_type = "INT"
-        else:
-            s_column.capacity = raw[key].iloc[1:][column].str.len().max()
-            if np.isnan(s_column.capacity):
-                s_column.capacity = 40
-            else:
-                s_column.capacity = int(s_column.capacity)
-            s_column.data_type = " CHAR(" + str(s_column.capacity) + ")"
-
-
-        table.columns.append(s_column)
-
-        #print(table_name + " has unique keys: " + str(candidate_keys))
-
-    database.tables[table.name] = table
-
-    # print("Table.name {} .alias {} .columns {}".format(table.name, table.alias, table.getColumnNames()))
+database.create(raw)
 
 # Create the database tables
 # Iterate through the schema.Table and schema.Column objects to generate corresponding CREATE TABLE SQL commands
