@@ -2,7 +2,6 @@ import re
 import pandas as pd
 from enum import Enum
 
-import psycopg2
 from psycopg2 import sql
 
 class Database:
@@ -13,7 +12,7 @@ class Database:
     def getNumberOfTables(self) -> int:
         return len(self.tables)
 
-    # Iterate through each MS Excel sheet to create corresponding Table and Column objects
+    """Iterate through each MS Excel sheet to create Table and Column objects"""
     def create(self, data):
         for key in data:
 
@@ -25,31 +24,16 @@ class Database:
             for column in data[key].columns:
 
                 candidate_keys = []
-
-                #type = data[key].iloc[0:][column].dtypes
-                # print("Column(data[{}].iloc[1:][{}] = {}".format(key, column, data[key].iloc[0:][column]))
                 s_column = Column(data[key][column])
-
-                #print("s_column.name = ".format(s_column.name))
 
                 if len(data[key][column]) == len(data[key][column].unique()):
                     candidate_keys.append(s_column.name)
 
-                #type = Column.type(data[key].iloc[1:][column])
-                #print("type = ".format(type))
-
-
-
-
                 table.columns.append(s_column)
-
-                # print(table_name + " has unique keys: " + str(candidate_keys))
 
             self.tables[table.name] = table
 
-            #print("Table.name {} .alias {} .columns {}".format(table.name, table.alias, table.getColumnNames()))
-
-    # Iterate through the Table and Column objects to generate CREATE TABLE SQL commands
+    """ Iterate through the Table and Column objects to generate CREATE TABLE SQL commands"""
     def createTables(self, cur, force : bool) -> None:
         for name, table in self.tables.items():
             columns = []
@@ -84,7 +68,7 @@ class Database:
 
             cur.execute(query)
 
-    # Iterate through each MS Excel sheet (again) to insert data into corresponding tables
+    """Iterate through each MS Excel sheet (again) to insert data into corresponding tables"""
     def insertData(self, cur, data):
 
         for key in data:
@@ -134,9 +118,6 @@ class Column:
         self.name = re.sub(r'[\s+\/-]', '_', str(column.name).lower())
         self.alias = column.name
         self.capacity = 0
-
-        #type = column.dtypes
-        #self.type = Column.type(column)
 
         max = 0
         self.type = Type.CHAR
