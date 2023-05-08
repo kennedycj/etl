@@ -1,16 +1,20 @@
 import re
-import numpy as np
 import pandas as pd
 from enum import Enum
+
+import psycopg2
+
 class Database:
 
     def __init__(self):
         self.tables = {}
-        precision = 1.0
+
+    def getNumberOfTables(self) -> int:
+        return len(self.tables)
 
     # Iterate through each MS Excel sheet, formatted as a dict of pandas dataframes to create corresponding Table and
     # Column objects
-    def create(self, data : pd.DataFrame):
+    def create(self, data):
         for key in data:
 
             table_name = Table.standardize(key)
@@ -24,23 +28,20 @@ class Database:
 
                 candidate_keys = []
 
-                dtype = data[key].iloc[1:][column].dtypes
-                s_column = Column(Column.standardize(data[key].iloc[0][column]))
+                #type = data[key].iloc[0:][column].dtypes
+                # print("Column(data[{}].iloc[1:][{}] = {}".format(key, column, data[key].iloc[0:][column]))
+                s_column = Column(data[key][column])
+
+                #print("s_column.name = ".format(s_column.name))
 
                 if len(data[key][column]) == len(data[key][column].unique()):
                     candidate_keys.append(s_column.name)
 
-                if dtype == 'float64':
-                    s_column.data_type = "DOUBLE PRECISION"
-                elif dtype == 'int64':
-                    s_column.data_type = "INT"
-                else:
-                    s_column.capacity = data[key].iloc[1:][column].str.len().max()
-                    if np.isnan(s_column.capacity):
-                        s_column.capacity = 40
-                    else:
-                        s_column.capacity = int(s_column.capacity)
-                    s_column.data_type = " CHAR(" + str(s_column.capacity) + ")"
+                #type = Column.type(data[key].iloc[1:][column])
+                #print("type = ".format(type))
+
+
+
 
                 table.columns.append(s_column)
 
@@ -48,7 +49,62 @@ class Database:
 
             self.tables[table.name] = table
 
-            # print("Table.name {} .alias {} .columns {}".format(table.name, table.alias, table.getColumnNames()))
+            #print("Table.name {} .alias {} .columns {}".format(table.name, table.alias, table.getColumnNames()))
+
+    # Iterate through the schema.Table and schema.Column objects to generate corresponding CREATE TABLE SQL commands
+    def createTables(self, cur, force : bool) -> None:
+        for name, table in self.tables.items():
+            columns = []
+
+            for column in table.columns:
+                row = []
+                row.append(column.name)
+
+                if column.type == Type.CHAR:
+                    type = "{} ({})".format(column.type.name, column.capacity)
+                else:
+                    type = column.type.name
+
+                row.append(type)
+                columns.append(row)
+
+            inner_rows = [' '.join(row) for row in columns]
+
+            if (force):
+                query = psycopg2.sql.SQL("DROP TABLE IF EXISTS {}").format(psycopg2.sql.Identifier(name))
+                cur.execute(query)
+
+            column_defs = psycopg2.sql.SQL(', ').join([
+                psycopg2.sql.SQL("{} {}").format(
+                    psycopg2.sql.Identifier(col_name),
+                    psycopg2.sql.SQL(col_type)
+                ) for col_name, col_type in columns
+            ])
+
+            query = psycopg2.sql.SQL("CREATE TABLE {} ({})").format(
+                psycopg2.sql.Identifier(name),
+                column_defs
+            )
+
+            cur.execute(query)
+
+    # Iterate through each MS Excel sheet (again) to insert data into corresponding tables
+    def insertData(self, cur, data):
+
+        for key in data:
+            table = Table.standardize(key)
+
+            column_names = self.tables[table].getColumnNames()
+
+            for index, row in data[key].iterrows():
+                query = psycopg2.sql.SQL("INSERT INTO {} ({}) VALUES ({})").format(
+                    psycopg2.sql.Identifier(table),
+                    psycopg2.sql.SQL(', ').join(map(psycopg2.sql.Identifier, column_names)),
+                    psycopg2.sql.SQL(', ').join(map(psycopg2.sql.Literal, row.tolist()))
+
+                )
+
+                cur.execute(query)
 
 class Table:
 
@@ -68,43 +124,47 @@ class Table:
 
 class Type(Enum):
     NULL = r'^\s*$'
-    BOOL = r'^(Yes\d*|No\d*|0|1)$'
+    BOOL = r'^(Y(es)?|N(o)?|T(rue)?|F(alse)?)$'
     INT = r'^[0-9]+$'
     FLOAT = r'^[0-9]+\.[0-9]+$'
     CHAR = ''
 
+class Key(Enum):
+    ALTERNATE, CANDIDATE, COMPOSITE, FOREIGN, PRIMARY, UNIQUE, SUPER = range(1, 8)
 class Column:
 
-    def __init__(self, name):
-        self.name = name
-        self.alias = ""
-        self.Type = Type.CHAR
+    def __init__(self, column : pd.Series):
+        # Cleanup the column names by replacing spaces and backslash characters with underscores and making all
+        # characters lowercase. The regular expression used here should be replaced by a proper parser
+        self.name = re.sub(r'[\s+\/-]', '_', str(column.name).lower())
+        self.alias = column.name
         self.capacity = 0
-        self.key_types = []
 
-    # Eventually, this should be moved into __init__ to couple a Column object with its data type. Then the number of
-    # matches can be stored and used programmatically in another piece of code.
-    def type(data : pd.Series) -> Type:
+        #type = column.dtypes
+        #self.type = Column.type(column)
 
         max = 0
-        type = Type.CHAR
+        self.type = Type.CHAR
         for member in Type:
 
             pattern = re.compile(member.value)
 
-            matches = sum(pattern.match(str(value)) is not None for value in data)
+            matches = sum(pattern.match(str(value)) is not None for value in column)
             print("matches for {} = {}".format(member.name, matches))
 
             if(matches > max):
                 max = matches
-                type = member
+                self.type = member
 
-        match_percentage = max / len(data)
-        print("match_percentage = {}".format(match_percentage))
+        self.precision = max / len(column)
+        #print("match_percentage = {}".format(self.precision))
 
-        return type
+        if self.type == Type.CHAR:
+            try:
+                self.capacity = int(column.str.len().max()) + 10 # this is a hack around char (x) cast to timestamp by psycopg2
 
-    def standardize(name):
-        #Cleanup the column names by replacing spaces and backslash characters with underscores and making all
-        #characters lowercase. The regular expression used here should be replaced by a proper parser
-        return re.sub(r'[\s+\/-]', '_', str(name).lower())
+            except:
+                self.capacity = 40
+
+
+        self.key_types = []
