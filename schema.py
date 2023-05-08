@@ -3,6 +3,7 @@ import pandas as pd
 from enum import Enum
 
 import psycopg2
+from psycopg2 import sql
 
 class Database:
 
@@ -12,8 +13,7 @@ class Database:
     def getNumberOfTables(self) -> int:
         return len(self.tables)
 
-    # Iterate through each MS Excel sheet, formatted as a dict of pandas dataframes to create corresponding Table and
-    # Column objects
+    # Iterate through each MS Excel sheet to create corresponding Table and Column objects
     def create(self, data):
         for key in data:
 
@@ -22,8 +22,6 @@ class Database:
             # Store cleaned and original table name in Table
             table = Table(table_name)
             table.alias = key
-            columns = []
-            column_names = []
             for column in data[key].columns:
 
                 candidate_keys = []
@@ -51,7 +49,7 @@ class Database:
 
             #print("Table.name {} .alias {} .columns {}".format(table.name, table.alias, table.getColumnNames()))
 
-    # Iterate through the schema.Table and schema.Column objects to generate corresponding CREATE TABLE SQL commands
+    # Iterate through the Table and Column objects to generate CREATE TABLE SQL commands
     def createTables(self, cur, force : bool) -> None:
         for name, table in self.tables.items():
             columns = []
@@ -67,8 +65,6 @@ class Database:
 
                 row.append(type)
                 columns.append(row)
-
-            inner_rows = [' '.join(row) for row in columns]
 
             if (force):
                 query = psycopg2.sql.SQL("DROP TABLE IF EXISTS {}").format(psycopg2.sql.Identifier(name))
@@ -114,8 +110,8 @@ class Table:
         self.columns = []
 
     def standardize(name):
-        # Remove everything after the first space character and insert an underscore between the table label and its number.
-        # This assumes default naming by MS Excel using import from PDF
+        # Remove everything after the first space character
+        # Assumes default naming by MS Excel using import from PDF
         standard_name = name.lower().split(" ")[0]
         return standard_name[:5] + "_" + standard_name[5:]
 
@@ -134,8 +130,7 @@ class Key(Enum):
 class Column:
 
     def __init__(self, column : pd.Series):
-        # Cleanup the column names by replacing spaces and backslash characters with underscores and making all
-        # characters lowercase. The regular expression used here should be replaced by a proper parser
+        # Cleanup the column names
         self.name = re.sub(r'[\s+\/-]', '_', str(column.name).lower())
         self.alias = column.name
         self.capacity = 0
@@ -161,9 +156,10 @@ class Column:
 
         if self.type == Type.CHAR:
             try:
-                self.capacity = int(column.str.len().max()) + 10 # this is a hack around char (x) cast to timestamp by psycopg2
+                # This is a hack around char (x) cast to timestamp by psycopg2
+                self.capacity = int(column.str.len().max()) + 10
 
-            except:
+            except Exception:
                 self.capacity = 40
 
 
