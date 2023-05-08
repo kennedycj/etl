@@ -2,7 +2,6 @@ import pandas as pd
 import pytest
 
 import schema
-import psycopg2
 
 @pytest.fixture()
 def setup():
