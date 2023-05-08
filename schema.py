@@ -2,8 +2,8 @@ import re
 import pandas as pd
 from enum import Enum
 
-import psycopg2
 from psycopg2 import sql
+
 
 class Database:
 
@@ -34,7 +34,7 @@ class Database:
 
             self.tables[table.name] = table
 
-    """ Iterate through the Table and Column objects to generate CREATE TABLE SQL commands"""
+    """Generate CREATE TABLE SQL commands"""
     def createTables(self, cur, force : bool) -> None:
         for name, table in self.tables.items():
             columns = []
@@ -52,24 +52,26 @@ class Database:
                 columns.append(row)
 
             if (force):
-                query = psycopg2.sql.SQL("DROP TABLE IF EXISTS {}").format(psycopg2.sql.Identifier(name))
+                query = sql.SQL("DROP TABLE IF EXISTS {}").format(
+                    sql.Identifier(name)
+                )
                 cur.execute(query)
 
-            column_defs = psycopg2.sql.SQL(', ').join([
-                psycopg2.sql.SQL("{} {}").format(
-                    psycopg2.sql.Identifier(col_name),
-                    psycopg2.sql.SQL(col_type)
+            column_defs = sql.SQL(', ').join([
+                sql.SQL("{} {}").format(
+                    sql.Identifier(col_name),
+                    sql.SQL(col_type)
                 ) for col_name, col_type in columns
             ])
 
-            query = psycopg2.sql.SQL("CREATE TABLE {} ({})").format(
-                psycopg2.sql.Identifier(name),
+            query = sql.SQL("CREATE TABLE {} ({})").format(
+                sql.Identifier(name),
                 column_defs
             )
 
             cur.execute(query)
 
-    """Iterate through each MS Excel sheet (again) to insert data into corresponding tables"""
+    """Insert data into corresponding tables"""
     def insertData(self, cur, data):
 
         for key in data:
@@ -78,10 +80,10 @@ class Database:
             column_names = self.tables[table].getColumnNames()
 
             for index, row in data[key].iterrows():
-                query = psycopg2.sql.SQL("INSERT INTO {} ({}) VALUES ({})").format(
-                    psycopg2.sql.Identifier(table),
-                    psycopg2.sql.SQL(', ').join(map(psycopg2.sql.Identifier, column_names)),
-                    psycopg2.sql.SQL(', ').join(map(psycopg2.sql.Literal, row.tolist()))
+                query = sql.SQL("INSERT INTO {} ({}) VALUES ({})").format(
+                    sql.Identifier(table),
+                    sql.SQL(', ').join(map(sql.Identifier, column_names)),
+                    sql.SQL(', ').join(map(sql.Literal, row.tolist()))
 
                 )
 
