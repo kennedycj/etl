@@ -2,6 +2,7 @@ import re
 import pandas as pd
 from enum import Enum
 
+import psycopg2
 from psycopg2 import sql
 
 class Database:
