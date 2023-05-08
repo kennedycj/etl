@@ -1,7 +1,7 @@
 import re
 import pandas as pd
-from enum import Enum
 
+from enum import Enum
 from psycopg2 import sql
 
 class Database:
@@ -34,7 +34,8 @@ class Database:
             self.tables[table.name] = table
 
     """Generate CREATE TABLE SQL commands"""
-    def createTables(self, cur, force : bool) -> None:
+    def createTables(self, cur, force : bool) -> int:
+        n_tables = 0
         for name, table in self.tables.items():
             columns = []
 
@@ -69,10 +70,13 @@ class Database:
             )
 
             cur.execute(query)
+            n_tables += 1
+
+        return n_tables
 
     """Insert data into corresponding tables"""
-    def insertData(self, cur, data):
-
+    def insertData(self, cur, data) -> int:
+        n_rows = 0
         for key in data:
             table = Table.standardize(key)
 
@@ -87,6 +91,9 @@ class Database:
                 )
 
                 cur.execute(query)
+                n_rows += 1
+
+        return n_rows
 
 class Table:
 
@@ -120,6 +127,7 @@ class Column:
         self.name = re.sub(r'[\s+\/-]', '_', str(column.name).lower())
         self.alias = column.name
         self.capacity = 0
+        self.buffer = 10
 
         max = 0
         self.type = Type.CHAR
@@ -128,19 +136,17 @@ class Column:
             pattern = re.compile(member.value)
 
             matches = sum(pattern.match(str(value)) is not None for value in column)
-            print("matches for {} = {}".format(member.name, matches))
 
             if(matches > max):
                 max = matches
                 self.type = member
 
         self.precision = max / len(column)
-        #print("match_percentage = {}".format(self.precision))
 
         if self.type == Type.CHAR:
             try:
                 # This is a hack around char (x) cast to timestamp by psycopg2
-                self.capacity = int(column.str.len().max()) + 10
+                self.capacity = int(column.str.len().max()) + self.buffer
 
             except Exception:
                 self.capacity = 40

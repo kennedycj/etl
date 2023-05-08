@@ -24,16 +24,20 @@ conn = psycopg2.connect(database=args.dbname,
                         port=args.port)
 
 cur = conn.cursor()
+print("Opened database {}".format(args.dbname))
 
 # Create the database schema
 database = schema.Database()
 database.create(data)
+print("Created schema")
 
 # Create the database tables
-database.createTables(cur, args.force)
+n_tables = database.createTables(cur, args.force)
+print("Created {} tables".format(n_tables))
 
 # Insert data into tables
-database.insertData(cur, data)
+n_rows = database.insertData(cur, data)
+print("Inserted {} rows".format(n_rows))
 
 conn.commit()
 cur.close()
