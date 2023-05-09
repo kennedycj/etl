@@ -27,8 +27,8 @@ cur = conn.cursor()
 print("Opened database {}".format(args.dbname))
 
 # Create the database schema
-database = schema.Database()
-database.create(data)
+database = schema.Database(data)
+database.create()
 print("Created schema")
 
 # Create the database tables

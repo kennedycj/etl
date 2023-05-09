@@ -6,32 +6,86 @@ from psycopg2 import sql
 
 class Database:
 
-    def __init__(self):
+    def __init__(self, data):
         self.tables = {}
+        self.data = data
 
     def getNumberOfTables(self) -> int:
         return len(self.tables)
 
     """Iterate through each MS Excel sheet to create Table and Column objects"""
-    def create(self, data):
-        for key in data:
+    def create(self):
+        for key in self.data:
 
             table_name = Table.standardize(key)
 
             # Store cleaned and original table name in Table
             table = Table(table_name)
             table.alias = key
-            for column in data[key].columns:
+            for col in self.data[key].columns:
 
-                candidate_keys = []
-                s_column = Column(data[key][column])
+                df = self.data[key]
+                new_column = Column(df[col])
 
-                if len(data[key][column]) == len(data[key][column].unique()):
-                    candidate_keys.append(s_column.name)
+                # Check if column is a candidate key (has unique values)
+                if len(df[col].unique()) == len(df[col]):
+                    table.keys[Key.CANDIDATE].append(col)
+                # Check if column is a unique key
+                elif df[col].is_unique:
+                    table.keys[Key.UNIQUE].append(col)
+                # Check if column is part of an alternate key
+                elif any(df.groupby(col).size() > 1):
+                    table.keys[Key.ALTERNATE].append(col)
+                # Check if column is part of a composite key
+                elif len(df.columns) > 1 and len(df.groupby(list(df.columns)).size()) == len(df):
+                    table.keys[Key.COMPOSITE].append(col)
+                # Check if column is part of the primary key
+                elif col in df.index.names:
+                    table.keys[Key.PRIMARY].append(col)
 
-                table.columns.append(s_column)
+                table.columns.append(new_column)
+
+            print("{}".format(table.keys))
 
             self.tables[table.name] = table
+
+        self.findKeys()
+
+        # find FOREIGN KEYS from key_types
+    def findKeys(self):
+        data_frames = self.data
+        # Find the PRIMARY KEY for each table
+        primary_keys = {}
+        for table_name, df in data_frames.items():
+            # Check for a single-column PRIMARY KEY
+            for column in df.columns:
+                if df[column].is_unique:
+                    primary_keys[table_name] = column
+                    break
+            # Check for a multi-column PRIMARY KEY
+            if table_name not in primary_keys:
+                for i, row in df.iterrows():
+                    if df.duplicated(subset=row.index.tolist()).any():
+                        primary_keys[table_name] = row.index.tolist()
+                        break
+
+        # Find the FOREIGN KEYS that reference each PRIMARY KEY along with their REFERENCE table
+        foreign_keys = {}
+        for primary_key_table, primary_key_column in primary_keys.items():
+            for foreign_key_table, df in data_frames.items():
+                if foreign_key_table == primary_key_table:
+                    continue
+                for column in df.columns:
+                    if set(df[column]).issubset(set(data_frames[primary_key_table][primary_key_column])):
+                        if foreign_key_table not in foreign_keys:
+                            foreign_keys[foreign_key_table] = []
+                        foreign_keys[foreign_key_table].append((primary_key_table, primary_key_column))
+
+        # Print the results
+        print('PRIMARY KEYS:')
+        print(primary_keys)
+        print('FOREIGN KEYS:')
+        print(foreign_keys)
 
     """Generate CREATE TABLE SQL commands"""
     def createTables(self, cur, force : bool) -> int:
@@ -101,6 +155,15 @@ class Table:
         self.name = name
         self.alias = ""
         self.columns = []
+        self.keys = {
+            Key.ALTERNATE : [],
+            Key.CANDIDATE : [],
+            Key.COMPOSITE : [],
+            Key.FOREIGN : [],
+            Key.PRIMARY : [],
+            Key.UNIQUE : [],
+            Key.SUPER : []
+        }
 
     def standardize(name):
         # Remove everything after the first space character
@@ -119,7 +182,13 @@ class Type(Enum):
     CHAR = ''
 
 class Key(Enum):
-    ALTERNATE, CANDIDATE, COMPOSITE, FOREIGN, PRIMARY, UNIQUE, SUPER = range(1, 8)
+    ALTERNATE = "ALTERNATE"
+    CANDIDATE = "CANDIDATE"
+    COMPOSITE = "COMPOSITE"
+    FOREIGN = "FOREIGN"
+    PRIMARY = "PRIMARY"
+    UNIQUE = "UNIQUE"
+    SUPER = "SUPER"
 class Column:
 
     def __init__(self, column : pd.Series):
@@ -150,6 +219,5 @@ class Column:
 
             except Exception:
                 self.capacity = 40
-
 
         self.key_types = []
