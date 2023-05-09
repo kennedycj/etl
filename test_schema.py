@@ -25,8 +25,8 @@ def setup():
     yield data
 
 def test_create(setup):
-    db = schema.Database()
-    db.create(setup)
+    db = schema.Database(setup)
+    db.create()
     assert db.getNumberOfTables() == 2
     assert list(db.tables.keys()) == ['table_1', 'table_2']
 

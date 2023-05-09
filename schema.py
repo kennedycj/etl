@@ -69,7 +69,8 @@ class Database:
                         primary_keys[table_name] = row.index.tolist()
                         break
 
-        # Find the FOREIGN KEYS that reference each PRIMARY KEY along with their REFERENCE table
+        # Find the FOREIGN KEYS that reference each PRIMARY KEY
+        # along with their REFERENCE table
         foreign_keys = {}
         for primary_key_table, primary_key_column in primary_keys.items():
             for foreign_key_table, df in data_frames.items():
