@@ -12,6 +12,7 @@ parser.add_argument('-W', '--password', type=str, required=True)
 parser.add_argument('-H', '--host', type=str, required=False)
 parser.add_argument('-P', '--port', type=str, required=False)
 parser.add_argument('-F', '--force', action='store_true')
+parser.add_argument('-K', '--add_keys', action='store_true')
 args = parser.parse_args()
 
 data = pd.read_excel(args.filename, sheet_name=None)
@@ -29,10 +30,14 @@ print("Opened database {}".format(args.dbname))
 # Create the database schema
 database = schema.Database(data)
 database.create()
-print("Created schema")
+print("Created schema with {} tables".format(database.getNumberOfTables()))
+
+if args.add_keys:
+    n_primary_keys = database.findKeys()
+    print("Found {} primary keys".format(n_primary_keys))
 
 # Create the database tables
-n_tables = database.createTables(cur, args.force)
+n_tables = database.createTables(cur, conn, args.force)
 print("Created {} tables".format(n_tables))
 
 # Insert data into tables

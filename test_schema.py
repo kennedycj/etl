@@ -28,22 +28,19 @@ def test_create(setup):
     db = schema.Database(setup)
     db.create()
     assert db.getNumberOfTables() == 2
-    assert list(db.tables.keys()) == ['table_1', 'table_2']
+    assert list(db.tables.keys()) == ['table1', 'table2']
 
-    table = db.tables['table_1']
-    assert table.name == 'table_1'
-    assert table.alias == 'table1'
+    table = db.tables['table1']
+    assert table.name == 'table1'
     assert table.getColumnNames() == ['col1', 'col2', 'col3', 'col4']
 
 
 def test_column(setup):
     col = schema.Column(setup['table2'].col1)
     assert col.name == 'col1'
-    assert col.alias == 'col1'
     assert col.type == schema.Type.BOOL
 
     col = schema.Column(setup['table1'].col4)
     assert col.name == 'col4'
-    assert col.alias == 'col4'
     assert col.type == schema.Type.CHAR
     assert col.capacity == 23
