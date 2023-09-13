@@ -4,7 +4,7 @@ import pytest
 import ledger
 @pytest.fixture()
 def setup_accounts():
-    asset_account = ledger.Account("ASSETS", type=ledger.Type.ASSETS)
+    asset_account = ledger.Account(name="ASSETS", type=ledger.Type.ASSETS)
     liability_account = ledger.Account(name="LIABILITIES", type=ledger.Type.LIABILITIES)
     income_account = ledger.Account(name="INCOME", type=ledger.Type.INCOME)
     expense_account = ledger.Account(name="EXPENSES", type=ledger.Type.EXPENSES)

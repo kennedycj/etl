@@ -4,10 +4,23 @@ from enum import Enum
 import numpy as np
 import pandas as pd
 
-class Ledger:
-    def __init__(self, id=uuid.uuid4(), name='', opened=datetime.now(timezone.utc), single_entry=False):
+class Transaction(Enum):
+    CREDIT = 1
+    DEBIT = -1
+class Type(Enum):
+    ASSETS = 1
+    LIABILITIES = -1
+    INCOME = -1
+    EXPENSES = 1
+    EQUITY = -1
+class Header:
+    def __init__(self, id, name, description):
         self.id = id
         self.name = name
+        self.description = description
+class Ledger(Header):
+    def __init__(self, id=uuid.uuid4(), name='', description='', opened=datetime.now(timezone.utc), single_entry=False):
+        Header.__init__(self, id, name, description)
         self.opened = opened
         self.single_entry = single_entry
 
@@ -27,8 +40,8 @@ class Ledger:
     def load_from_database(self) -> None:
         return None
 
-    def load_from_file(self) -> None:
-        return None
+    def load_from_file(self, filename):
+        self.journal = pd.read_excel(filename, sheet_name=None)
     def save_to_database(self) -> None:
         return None
 
@@ -36,8 +49,8 @@ class Ledger:
         return None
 
 class Block(Ledger):
-    def __init__(self, id=uuid.uuid4(), name='', opened=datetime.now(timezone.utc)):
-        Ledger.__init__(self, id, name, opened)
+    def __init__(self, id=uuid.uuid4(), name='', description='', opened=datetime.now(timezone.utc)):
+        Ledger.__init__(self, id, name, description, opened)
         self.closed = datetime.max
 
     def is_closed(self) -> bool:
@@ -77,25 +90,16 @@ class Block(Ledger):
 
             self.post(overdraft_account, balance)
 
-        print("BALANCE AFTER REMEDY = {}".format(self.balance()))
+        print("BALANCE AFTER OVERDRAFT = {}".format(self.balance()))
         print("PRINTING JOURNAL")
         print("{} rows".format(self.journal.shape[0]))
         for index, row in self.journal.iterrows():
            print("account = {} amount = {}".format(row["Account"], row["Amount"]))
 
         self.closed = datetime.now(timezone.utc)
-class Transaction(Enum):
-    CREDIT = 1
-    DEBIT = -1
-class Type(Enum):
-    ASSETS = 1
-    LIABILITIES = -1
-    INCOME = -1
-    EXPENSES = 1
-    EQUITY = -1
 class Account(Block):
-    def __init__(self, id=uuid.uuid4(), name='', created=datetime.now(timezone.utc), type=Type.ASSETS):
-        Block.__init__(self, id, name, created)
+    def __init__(self, id=uuid.uuid4(), name='', description='', created=datetime.now(timezone.utc), type=Type.ASSETS):
+        Block.__init__(self, id, name, description, created)
         self.single_entry = True
         self.type = type
 
