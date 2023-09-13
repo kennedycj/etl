@@ -7,7 +7,7 @@ def setup_accounts():
     asset_account = ledger.Account(name="ASSETS", type=ledger.Type.ASSETS)
     liability_account = ledger.Account(name="LIABILITIES", type=ledger.Type.LIABILITIES)
     income_account = ledger.Account(name="INCOME", type=ledger.Type.INCOME)
-    expense_account = ledger.Account(name="EXPENSES", type=ledgeSer.Type.EXPENSES)
+    expense_account = ledger.Account(name="EXPENSES", type=ledger.Type.EXPENSES)
     equity_account = ledger.Account(name="EQUITY", type=ledger.Type.EQUITY)
     yield asset_account, liability_account, income_account, expense_account, equity_account
 @pytest.fixture()
