@@ -3,7 +3,6 @@ import uuid
 from enum import Enum
 import numpy as np
 import pandas as pd
-
 class Transaction(Enum):
     CREDIT = 1
     DEBIT = -1
@@ -25,26 +24,24 @@ class Ledger(Header):
         self.single_entry = single_entry
 
         self.journal = pd.DataFrame(columns=["Account", "Amount"])
-    def post(self, block):
+    def entry(self, block):
         if type(block) != Block:
-            raise TypeError("expected Block type")
+            raise TypeError("expected Block type for ledger entry")
 
         if block.closed == datetime.max:
             raise ValueError("cannot add unclosed block to ledger {}".format(self.id))
 
         self.journal = pd.concat([self.journal, block], ignore_index=True)
-
     def net(self) -> None:
         return None
-
+    def post(self) -> None:
+        return None
     def load_from_database(self) -> None:
         return None
-
     def load_from_file(self, filename):
         self.journal = pd.read_excel(filename, sheet_name=None)
     def save_to_database(self) -> None:
         return None
-
     def save_to_file(self) -> None:
         return None
 
@@ -56,7 +53,7 @@ class Block(Ledger):
     def is_closed(self) -> bool:
         return self.closed.replace(tzinfo=None) < datetime.max
 
-    def post(self, account, amount):
+    def entry(self, account, amount):
         if self.is_closed():
             raise ValueError("cannot add posting to closed transaction {}".format(self.id))
 
@@ -88,7 +85,7 @@ class Block(Ledger):
                 print("Txn({}) Txn({})".format(overdraft_account.type.value, np.sign(balance)))
                 balance = -1 * balance
 
-            self.post(overdraft_account, balance)
+            self.entry(overdraft_account, balance)
 
         print("BALANCE AFTER OVERDRAFT = {}".format(self.balance()))
         print("PRINTING JOURNAL")

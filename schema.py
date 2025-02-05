@@ -3,7 +3,6 @@ import pandas as pd
 
 from enum import Enum
 from psycopg2 import sql
-
 class Database:
 
     def __init__(self, data):
