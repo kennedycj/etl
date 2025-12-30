@@ -177,11 +177,31 @@ def classify_transaction_type(description: str, amount: Decimal,
         return 'transfer'
     
     # For credit cards, negative amounts are expenses (spending)
-    if account_type in ['credit_card'] and amount < 0:
-        return 'expense'
+    # Positive amounts on credit cards are refunds/credits (reduce expense, not income)
+    if account_type in ['credit_card']:
+        if amount < 0:
+            return 'expense'
+        else:
+            # Positive amount on credit card = refund/credit, should be expense credit
+            # But for now, classify as expense (will show as negative expense = credit)
+            return 'expense'
     
     # For checking/savings, positive amounts are usually income
+    # BUT: check description first to avoid misclassifying expense refunds/credits
     if account_type in ['checking', 'savings'] and amount > 0:
+        # Check for expense indicators in description (merchants, stores, etc.)
+        # These are likely refunds/credits from merchants, not income
+        expense_indicators = ['market', 'restaurant', 'hotel', 'air lines', 'delta', 
+                            'starbucks', 'mcdonald', 'cvs', 'pharmacy', 'store',
+                            'buy', 'nordstrom', 'apple.com', 'github', 'subscription',
+                            'sonesta', 'hyatt', 'sonder', 'best buy', 'audi', 'minneapolis',
+                            'cambridge', 'wayzata', 'long lake', 'liquor', 'wine', 'spirits',
+                            'pizza', 'burger', 'ice', 'tree', 'vacation', 'thrifty']
+        if any(indicator in description_lower or indicator in orig_desc_lower 
+               for indicator in expense_indicators):
+            # This is likely a refund/credit to an expense, not income
+            return 'expense'
+        
         if any(keyword in description_lower for keyword in income_keywords):
             return 'income'
         # Could be transfer - check description
