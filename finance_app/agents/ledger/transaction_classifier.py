@@ -129,9 +129,34 @@ def classify_transaction_type(description: str, amount: Decimal,
             return 'liability_payment'  # Mortgage payment reduces liability
         elif cat_lower in ['loans', 'loan', 'student loan', 'student loans']:
             return 'liability_payment'  # Loan payment reduces liability
-        elif cat_lower in ['savings', '529', '529k', 'investment', 'investments']:
-            # Investment contributions are asset movements, not expenses
+        elif cat_lower in ['529', '529k']:
+            # Explicit 529 category - investment contribution
             return 'investment_contribution'
+        elif cat_lower in ['investment', 'investments']:
+            # Investment category - but check description for transfer keywords first
+            # Transfers to savings accounts should not be investment contributions
+            desc_lower_temp = description.lower()
+            orig_desc_lower_temp = (original_description or '').lower()
+            transfer_keywords = ['transfer', 'to sav', 'from chk', 'from sav', 'to chk']
+            if any(kw in desc_lower_temp or kw in orig_desc_lower_temp for kw in transfer_keywords):
+                return 'transfer'  # It's a transfer, not an investment contribution
+            return 'investment_contribution'
+        elif cat_lower == 'savings':
+            # "Savings" category is ambiguous - could be:
+            # 1. Transfer to savings account (should be 'transfer')
+            # 2. 529 contribution (should be 'investment_contribution')
+            # Check description for transfer keywords first
+            desc_lower_temp = description.lower()
+            orig_desc_lower_temp = (original_description or '').lower()
+            transfer_keywords = ['transfer', 'to sav', 'from chk', 'from sav', 'to chk', 'sav ', 'savings']
+            if any(kw in desc_lower_temp or kw in orig_desc_lower_temp for kw in transfer_keywords):
+                return 'transfer'  # It's a transfer to savings, not a 529 contribution
+            # If no transfer keywords, check for 529 indicators
+            investment_keywords = ['529', 'mn dir', 'contribution', 'contrib']
+            if any(kw in desc_lower_temp or kw in orig_desc_lower_temp for kw in investment_keywords):
+                return 'investment_contribution'  # Likely a 529 contribution
+            # Default to transfer for "savings" category (most common case)
+            return 'transfer'
         # Other categories are likely expenses
     
     description_lower = description.lower()
@@ -142,9 +167,10 @@ def classify_transaction_type(description: str, amount: Decimal,
     if 'bill payment' in description_lower or 'bill payment' in orig_desc_lower:
         return 'expense'
     
-    # Investment contribution indicators (529, IRA, 401k, etc.)
+    # Investment contribution indicators (529, IRA, 401k, ABLE, etc.)
     investment_keywords = ['529', 'ira', '401k', '401(k)', 'contribution', 'contrib', 
-                          'mn dir', 'mn dir ach', 'direct ach', 'investment contribution']
+                          'mn dir', 'mn dir ach', 'direct ach', 'investment contribution',
+                          'able', 'mn able']
     
     # Check for investment contributions in description
     if any(keyword in description_lower or keyword in orig_desc_lower 
@@ -290,10 +316,15 @@ def create_ledger_postings(account_name: str, amount: Decimal, transaction_type:
         # Amount is negative (money going out of checking)
         # Determine investment account type from description or category
         desc_lower = description.lower()
-        # Check for 529 indicators first (MN DIR is Minnesota Direct 529)
+        # Check for ABLE indicators first (MN ABLE is Minnesota ABLE account)
+        # ABLE accounts are state-managed, not institution-specific
+        if ('able' in desc_lower or 'mn able' in desc_lower or 
+            (category and 'able' in category.lower())):
+            investment_account = "Assets:Investments:ABLE"
+        # Check for 529 indicators (MN DIR is Minnesota Direct 529)
         # 529 accounts are state-managed, not institution-specific
-        if ('529' in desc_lower or 'mn dir' in desc_lower or 
-            (category and '529' in category.lower())):
+        elif ('529' in desc_lower or 'mn dir' in desc_lower or 
+              (category and '529' in category.lower())):
             investment_account = "Assets:Investments:529"
         elif 'ira' in desc_lower or (category and 'ira' in category.lower()):
             # IRA accounts are institution-specific

@@ -5,20 +5,33 @@ from pathlib import Path
 from collections import Counter
 
 def get_ledger_path():
-    """Get the path to the ledger CSV file."""
-    archive_root = Path.home() / "Documents" / "finance_archive"
-    ledger_path = archive_root / "20_ledger" / "ledger.csv"
+    """Get the path to the ledger CSV file.
     
+    Defaults to ledger_reconciled.csv (with account matching corrections).
+    Falls back to ledger.csv if reconciled version doesn't exist.
+    """
     import os
+    archive_root = Path.home() / "Documents" / "finance_archive"
+    
     if "FINANCE_ARCHIVE_ROOT" in os.environ:
         archive_root = Path(os.environ["FINANCE_ARCHIVE_ROOT"])
-        ledger_path = archive_root / "20_ledger" / "ledger.csv"
     
-    return ledger_path
+    # Prefer reconciled ledger (with corrections), fall back to original
+    reconciled_path = archive_root / "20_ledger" / "ledger_reconciled.csv"
+    original_path = archive_root / "20_ledger" / "ledger.csv"
+    
+    if reconciled_path.exists():
+        return reconciled_path
+    elif original_path.exists():
+        return original_path
+    else:
+        return original_path  # Return path even if doesn't exist (will error with helpful message)
 
 def analyze_income_sources(ledger_path: Path):
     """Analyze top income sources in detail."""
     print(f"Reading ledger from: {ledger_path}")
+    if 'reconciled' in str(ledger_path):
+        print("(Using reconciled ledger with account matching corrections)")
     
     if not ledger_path.exists():
         print(f"Error: Ledger file not found at {ledger_path}")
