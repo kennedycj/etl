@@ -61,6 +61,12 @@ export DATABASE_URL=postgresql://...
 
 ---
 
+## Statements drop zone (archive root)
+
+Original PDFs and similar files go under **`$FINANCE_ARCHIVE_ROOT/statements/`** — a **flat** set of household-wide folders (`inbox`, `tax`, `property`, `loans`, `accounts`). Do not invent deeper paths for specific banks or product types; **ETL extracts** institution and account semantics from the files. See repo-root **`STATEMENTS_ARCHIVE_LAYOUT.md`**.
+
+---
+
 ## Registration (operators)
 
 ```bash
