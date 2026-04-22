@@ -1,0 +1,54 @@
+# Containerized OpenClaw gateway for runtime workflows.
+#
+# Usage:
+#   export OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:latest   # optional (defaults to latest)
+#   docker compose -f docker-compose.openclaw.yml build
+#   docker compose -f docker-compose.openclaw.yml up -d
+#
+# Persistence:
+#   Uses repo-local bind mounts under ./.openclaw_runtime/ (gitignored).
+#
+# Finance tools:
+#   Gateway image extends upstream OpenClaw with Python + requirements.txt so `exec`
+#   can run `python3 /workspace/etl/scripts/finance_overview.py`.
+#   DATABASE_URL defaults to host Postgres via host.docker.internal (Docker Desktop).
+#
+services:
+  openclaw-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.openclaw-gateway
+      args:
+        OPENCLAW_BASE_IMAGE: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
+    image: ${OPENCLAW_GATEWAY_IMAGE:-etl-openclaw-gateway:local}
+    container_name: etl-openclaw-gateway
+    ports:
+      - "18789:18789"
+    environment:
+      # Host machine publishing 5432 (see docker-compose.yml). Docker Desktop provides host.docker.internal.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://finance_user:finance_password@host.docker.internal:5432/finance}
+    extra_hosts:
+      # Linux Engine: map host gateway. Docker Desktop also accepts this.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./.openclaw_runtime/config:/home/node/.openclaw
+      - ./.openclaw_runtime/workspace:/home/node/.openclaw/workspace
+      # Finance tool policy + MCP-first instructions (committed in-repo).
+      - ./openclaw_workspace/FINANCE_TOOLS.md:/home/node/.openclaw/workspace/FINANCE_TOOLS.md:ro
+      # Repo checkout (host) → fixed path for exec/bash tools inside the gateway.
+      - .:/workspace/etl
+    restart: unless-stopped
+
+  # Optional helper container. It shares the gateway network namespace so it can
+  # reach the gateway over 127.0.0.1.
+  openclaw-cli:
+    image: ${OPENCLAW_GATEWAY_IMAGE:-etl-openclaw-gateway:local}
+    container_name: etl-openclaw-cli
+    network_mode: "service:openclaw-gateway"
+    volumes:
+      - ./.openclaw_runtime/config:/home/node/.openclaw
+      - ./.openclaw_runtime/workspace:/home/node/.openclaw/workspace
+      - ./openclaw_workspace/FINANCE_TOOLS.md:/home/node/.openclaw/workspace/FINANCE_TOOLS.md:ro
+      - .:/workspace/etl
+    entrypoint: ["node", "dist/index.js"]
+    restart: "no"

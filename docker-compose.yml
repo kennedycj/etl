@@ -1,0 +1,24 @@
+# Local PostgreSQL for development and sandbox testing.
+# Copy .env.example to .env.local and adjust if needed (see .gitignore).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: etl-finance-postgres
+    environment:
+      POSTGRES_USER: finance_user
+      POSTGRES_PASSWORD: finance_password
+      POSTGRES_DB: finance
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finance_user -d finance"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
