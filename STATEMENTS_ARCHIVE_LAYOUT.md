@@ -41,4 +41,20 @@ Prefer **`YYYY-MM-DD_short_label.pdf`** when you know an as-of or statement end 
 
 ---
 
+## Database persistence & privacy
+
+OpenClaw in a container typically **cannot read** files under your archive (by design). ETL runs where the archive is mounted and writes **only** into Postgres using a strict policy:
+
+| Stored | Not stored |
+|--------|------------|
+| Path under `statements/`, `sha256`, bucket, size, extraction status | Raw PDF bytes |
+| **`financial_facts`** JSON: amounts, tax lines, balances, filing year, categories **after** sanitization | Full OCR/text transcript, names, addresses, emails, phones, DOB |
+| | **SSN, ITIN, account numbers, routing numbers** — blocked by key list and pattern redaction; pipeline **refuses** to persist if SSN-shaped data remains |
+
+Implementation: `finance_app.statements.redaction.prepare_financial_facts_for_persistence()` must run on every blob before insert/update. MCP tools must return **sanitized DB fields** only (never raw extraction).
+
+Agents only see what the tools return; treating the DB as the durable, minimised source keeps privacy boundaries clear.
+
+---
+
 Nothing here replaces the ledger; it **grounds** balances and obligations the ledger alone may not capture.

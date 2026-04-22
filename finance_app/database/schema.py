@@ -1,6 +1,10 @@
 """Database schema creation and management."""
 
 from finance_app.database.connection import Base, create_database_engine
+
+# Import full models module so every table registers on Base before create_all.
+from finance_app.database import models as _models  # noqa: F401
+
 from finance_app.database.models import AccountModel, TransactionModel, BlockModel
 
 

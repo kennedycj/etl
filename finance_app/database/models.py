@@ -183,3 +183,38 @@ Index(
     AccountBalanceModel.as_of_date,
     unique=True,
 )
+
+
+class StatementArtifactModel(Base):
+    """Indexed archive document under statements/ plus privacy-preserving extracted facts.
+
+    Raw PDF text or transcripts are never stored. Only sanitized financial_facts JSON
+    may contain persisted content from extraction (see finance_app.statements.redaction).
+    """
+
+    __tablename__ = "statement_artifacts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+
+    # Identity of the blob (path under FINANCE_ARCHIVE_ROOT/statements/)
+    archive_relative_path = Column(Text, nullable=False)
+    bucket = Column(String(32), nullable=False, index=True)
+    content_sha256 = Column(String(64), nullable=False)
+    byte_size = Column(Numeric(20, 0), nullable=True)
+    source_mtime = Column(DateTime, nullable=True)
+
+    extraction_status = Column(String(32), nullable=False, default="indexed")
+    extractor_version = Column(String(64), nullable=True)
+
+    # Only financial scalars / categories — never raw OCR; must pass prepare_financial_facts_for_persistence.
+    financial_facts = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+Index(
+    "idx_statement_artifacts_path_unique",
+    StatementArtifactModel.archive_relative_path,
+    unique=True,
+)

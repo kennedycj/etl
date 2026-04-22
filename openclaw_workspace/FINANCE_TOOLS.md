@@ -65,6 +65,8 @@ export DATABASE_URL=postgresql://...
 
 Original PDFs and similar files go under **`$FINANCE_ARCHIVE_ROOT/statements/`** — a **flat** set of household-wide folders (`inbox`, `tax`, `property`, `loans`, `accounts`). Do not invent deeper paths for specific banks or product types; **ETL extracts** institution and account semantics from the files. See repo-root **`STATEMENTS_ARCHIVE_LAYOUT.md`**.
 
+Persisted extracts must be **financial facts only** (sanitized JSON in Postgres — no raw PDF text, no SSN). MCP tools must expose **that** data to agents, not raw extraction blobs.
+
 ---
 
 ## Registration (operators)
