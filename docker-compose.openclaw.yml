@@ -27,6 +27,8 @@ services:
     environment:
       # Host machine publishing 5432 (see docker-compose.yml). Docker Desktop provides host.docker.internal.
       DATABASE_URL: ${DATABASE_URL:-postgresql://finance_user:finance_password@host.docker.internal:5432/finance}
+      # Optional: set in a `.env` next to this compose file so MCP analysis tools can find ledger CSV.
+      FINANCE_ARCHIVE_ROOT: ${FINANCE_ARCHIVE_ROOT:-}
     extra_hosts:
       # Linux Engine: map host gateway. Docker Desktop also accepts this.
       - "host.docker.internal:host-gateway"
