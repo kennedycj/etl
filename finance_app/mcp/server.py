@@ -14,6 +14,8 @@ from finance_app.importers.ledger_csv_importer import (
 )
 from finance_app.mcp import runtime
 from finance_app.mcp.subprocess_runners import run_repo_script
+from finance_app.agents.analysis.ledger_net_worth import compute_ledger_net_worth
+from finance_app.importers.balances_importer import import_balances_from_archive, compute_net_worth_from_balances
 
 mcp = FastMCP("etl-finance")
 
@@ -62,6 +64,48 @@ def analysis_income_sources_from_ledger() -> str:
 
 
 @mcp.tool()
+def ledger_net_worth_from_archive(finance_archive_root: str = "", ledger: str = "auto") -> str:
+    """Compute net worth directly from the double-entry ledger CSV (Assets/Liabilities only).
+
+    This is ledger-native and does not depend on the Postgres import semantics.
+    Returns JSON including two net worth interpretations depending on liability sign convention.
+    """
+    root = (finance_archive_root or os.environ.get("FINANCE_ARCHIVE_ROOT", "")).strip()
+    if not root:
+        return (
+            "Missing finance_archive_root argument or FINANCE_ARCHIVE_ROOT environment variable. "
+            "Example: set FINANCE_ARCHIVE_ROOT=/path/to/finance_archive on the gateway."
+        )
+
+    try:
+        ledger_path = resolve_ledger_csv(root, ledger)
+    except FileNotFoundError as e:
+        return f"Error: {e}. Is FINANCE_ARCHIVE_ROOT set and mounted into the gateway?"
+    res = compute_ledger_net_worth(ledger_path)
+
+    def top(d: dict, n: int = 10):
+        return sorted(((k, float(v)) for k, v in d.items()), key=lambda kv: abs(kv[1]), reverse=True)[:n]
+
+    payload = {
+        "ledger_path": res.ledger_path,
+        "assets_total": float(res.assets_total),
+        "liabilities_balance_sum": float(res.liabilities_balance_sum),
+        "liabilities_debt_if_negative": float(res.liabilities_debt_if_negative),
+        "liabilities_debt_if_positive": float(res.liabilities_debt_if_positive),
+        "net_worth_assuming_liabilities_negative": float(res.net_worth_assuming_liabilities_negative),
+        "net_worth_assuming_liabilities_positive": float(res.net_worth_assuming_liabilities_positive),
+        "top_asset_accounts_by_abs_balance": top(res.accounts_assets),
+        "top_liability_accounts_by_abs_balance": top(res.accounts_liabilities),
+        "notes": [
+            "This tool sums postings per account in the ledger CSV for Assets:* and Liabilities:* only.",
+            "If liabilities are recorded as negative balances (common), use net_worth_assuming_liabilities_negative.",
+            "If liabilities are recorded as positive balances, use net_worth_assuming_liabilities_positive.",
+        ],
+    }
+    return json.dumps(payload, indent=2)
+
+
+@mcp.tool()
 def operator_import_archive_ledger_into_postgres(
     finance_archive_root: str = "",
     ledger: str = "auto",
@@ -97,6 +141,73 @@ def operator_import_archive_ledger_into_postgres(
         )
     except Exception as e:
         session.rollback()
+        return f"Error: {e!r}"
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def operator_import_balance_snapshots_as_of(
+    as_of_date: str = "2025-12-31",
+    finance_archive_root: str = "",
+) -> str:
+    """Upsert balance snapshots from the archive into Postgres (non-destructive).
+
+    Sources (when present under FINANCE_ARCHIVE_ROOT):
+    - mortgage_balance.csv (US Bank)
+    - cd_balances.csv (Bank of America)
+    - investments_balance.csv (Fidelity/Morgan Stanley/ADP/etc.)
+    - loans.csv (normalized)
+    """
+    root = (finance_archive_root or os.environ.get("FINANCE_ARCHIVE_ROOT", "")).strip()
+    if not root:
+        return "Missing finance_archive_root argument or FINANCE_ARCHIVE_ROOT environment variable."
+
+    from dateutil import parser
+    cutoff = parser.parse(as_of_date)
+
+    from finance_app.database.connection import create_database_engine, create_session_factory
+    from finance_app.database.schema import create_tables
+
+    engine = create_database_engine(runtime.database_url())
+    # ensure new balances table exists
+    create_tables(engine, drop_existing=False)
+    SessionFactory = create_session_factory(engine)
+    session = SessionFactory()
+    try:
+        res = import_balances_from_archive(session, root, as_of_date=cutoff)
+        return json.dumps(
+            {"ok": True, "imported": res, "as_of_date": cutoff.date().isoformat()},
+            indent=2,
+        )
+    except Exception as e:
+        session.rollback()
+        return f"Error: {e!r}"
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def net_worth_from_balance_snapshots(as_of_date: str = "2025-12-31") -> str:
+    """Compute net worth from balance snapshots stored in Postgres (rigorous for as-of).
+
+    Requires operator_import_balance_snapshots_as_of to have been run at least once.
+    """
+    from dateutil import parser
+    cutoff = parser.parse(as_of_date)
+
+    from finance_app.database.connection import create_database_engine, create_session_factory
+    from finance_app.database.schema import create_tables
+
+    engine = create_database_engine(runtime.database_url())
+    create_tables(engine, drop_existing=False)
+    SessionFactory = create_session_factory(engine)
+    session = SessionFactory()
+    try:
+        payload = compute_net_worth_from_balances(session, as_of_date=cutoff)
+        payload["ok"] = True
+        return json.dumps(payload, indent=2)
+    except Exception as e:
         return f"Error: {e!r}"
     finally:
         session.close()

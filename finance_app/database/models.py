@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import Column, String, DateTime, Numeric, ForeignKey, Boolean, Text, Enum as SQLEnum
+from sqlalchemy import Column, String, DateTime, Numeric, ForeignKey, Boolean, Text, Enum as SQLEnum, Index
 from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship
 
@@ -148,3 +148,38 @@ class ImportLogModel(Base):
     
     def __repr__(self):
         return f"<ImportLog(id={self.id}, status='{self.status}', records={self.records_inserted})>"
+
+
+class AccountBalanceModel(Base):
+    """Point-in-time balance snapshots for accounts (as-of a statement date).
+
+    Convention:
+    - Assets: positive = you own
+    - Liabilities: positive = you owe
+    """
+
+    __tablename__ = "account_balances"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    account_id = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True, index=True)
+    account_name = Column(String(255), nullable=False, index=True)
+    account_type = Column(String(50), nullable=True, index=True)
+    institution_name = Column(String(255), nullable=True, index=True)
+    as_of_date = Column(DateTime, nullable=False, index=True)
+    balance = Column(Numeric(19, 4), nullable=False)
+    currency = Column(String(3), nullable=False, default="USD")
+
+    source = Column(String(50), nullable=True)  # mortgage_balance|cd_balances|investments_balance|loans_csv
+    source_file_path = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+Index(
+    "idx_account_balances_unique",
+    AccountBalanceModel.account_name,
+    AccountBalanceModel.as_of_date,
+    unique=True,
+)

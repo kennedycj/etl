@@ -24,6 +24,12 @@ Runs the same repo-root **`analyze_*.py`** scripts you use locally (stdout captu
 | **`analysis_income_from_ledger`** | `analyze_income.py` |
 | **`analysis_income_sources_from_ledger`** | `analyze_income_sources.py` |
 
+### Ledger-native net worth (avoids DB import semantics)
+
+| MCP tool | Purpose |
+|----------|---------|
+| **`ledger_net_worth_from_archive`** | Compute net worth directly from `20_ledger/*.csv` using Assets/Liabilities only; returns JSON with two liability-sign interpretations. |
+
 ### Operators & catalog
 
 | MCP tool | Purpose |

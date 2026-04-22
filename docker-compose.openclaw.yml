@@ -39,6 +39,9 @@ services:
       - ./openclaw_workspace/FINANCE_TOOLS.md:/home/node/.openclaw/workspace/FINANCE_TOOLS.md:ro
       # Repo checkout (host) → fixed path for exec/bash tools inside the gateway.
       - .:/workspace/etl
+      # Optional: mount finance archive read-only for ledger-native tools.
+      # Set FINANCE_ARCHIVE_ROOT on the host to /Users/caleb/Documents/family/finances/finance_archive (or your path).
+      - ${FINANCE_ARCHIVE_ROOT:-/dev/null}:/data/finance_archive:ro
     restart: unless-stopped
 
   # Optional helper container. It shares the gateway network namespace so it can
