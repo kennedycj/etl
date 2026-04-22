@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import csv
+import re
+from datetime import datetime
+from decimal import Decimal
 
 from mcp.server.fastmcp import FastMCP
 
@@ -61,6 +65,110 @@ def analysis_income_from_ledger() -> str:
 def analysis_income_sources_from_ledger() -> str:
     """Run analyze_income_sources.py."""
     return run_repo_script("analyze_income_sources.py", timeout=400)
+
+
+@mcp.tool()
+def ledger_spend_by_description_keywords_2025(
+    rent_keyword: str = "PRISM",
+    air_travel_keyword: str = "DELTA",
+    rideshare_keywords_csv: str = "LYFT,UBER",
+    finance_archive_root: str = "",
+    ledger: str = "auto",
+) -> str:
+    """Compute 2025 spending totals by description keywords from the ledger CSV.
+
+    This reads the ledger file under FINANCE_ARCHIVE_ROOT/20_ledger and sums Expense postings
+    whose `description` contains the given keywords (case-insensitive).
+
+    Notes:
+    - Spending is reported as positive dollars.
+    - This is keyword-based (not category-based) and uses ledger Expense postings (not Postgres).
+    """
+    root = (finance_archive_root or os.environ.get("FINANCE_ARCHIVE_ROOT", "")).strip()
+    if not root and os.path.isdir("/data/finance_archive"):
+        root = "/data/finance_archive"
+    if not root:
+        return "Missing finance_archive_root / FINANCE_ARCHIVE_ROOT."
+
+    try:
+        ledger_path = resolve_ledger_csv(root, ledger)
+    except FileNotFoundError as e:
+        return f"Error: {e}"
+
+    def norm_list(s: str):
+        return [x.strip() for x in (s or "").split(",") if x.strip()]
+
+    rent_kw = rent_keyword.strip()
+    air_kw = air_travel_keyword.strip()
+    ride_kws = norm_list(rideshare_keywords_csv)
+
+    # Patterns
+    rent_re = re.compile(re.escape(rent_kw), re.IGNORECASE) if rent_kw else None
+    air_re = re.compile(re.escape(air_kw), re.IGNORECASE) if air_kw else None
+    ride_res = [re.compile(re.escape(k), re.IGNORECASE) for k in ride_kws]
+
+    totals = {
+        "rent_prism": Decimal("0"),
+        "air_travel_delta": Decimal("0"),
+        "ground_transport_rideshare": Decimal("0"),
+    }
+    examples = {"rent_prism": [], "air_travel_delta": [], "ground_transport_rideshare": []}
+
+    def add_example(bucket: str, row: dict, amount: Decimal):
+        if len(examples[bucket]) >= 5:
+            return
+        examples[bucket].append(
+            {
+                "date": (row.get("date") or "")[:10],
+                "description": (row.get("description") or "")[:160],
+                "amount": float(amount),
+                "account": row.get("account"),
+            }
+        )
+
+    def to_dec(s: str) -> Decimal:
+        return Decimal(str(s).replace(",", "").strip())
+
+    with open(ledger_path, encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            d = (row.get("date") or "")[:10]
+            if not d.startswith("2025-"):
+                continue
+            acct = (row.get("account") or "").strip()
+            if not acct.startswith("Expenses:"):
+                continue
+            desc = row.get("description") or ""
+            amt = to_dec(row.get("amount") or "0")
+            spend = abs(amt)  # expense postings are often negative; report positive
+
+            if rent_re and rent_re.search(desc):
+                totals["rent_prism"] += spend
+                add_example("rent_prism", row, spend)
+            if air_re and air_re.search(desc):
+                totals["air_travel_delta"] += spend
+                add_example("air_travel_delta", row, spend)
+            if ride_res and any(r.search(desc) for r in ride_res):
+                totals["ground_transport_rideshare"] += spend
+                add_example("ground_transport_rideshare", row, spend)
+
+    payload = {
+        "ok": True,
+        "ledger_path": str(ledger_path),
+        "year": 2025,
+        "keywords": {
+            "rent_keyword": rent_kw,
+            "air_travel_keyword": air_kw,
+            "rideshare_keywords": ride_kws,
+        },
+        "totals": {k: float(v) for k, v in totals.items()},
+        "examples": examples,
+        "notes": [
+            "Totals are computed from Expenses:* postings only.",
+            "Matching is case-insensitive substring search on description.",
+        ],
+    }
+    return json.dumps(payload, indent=2)
 
 
 @mcp.tool()

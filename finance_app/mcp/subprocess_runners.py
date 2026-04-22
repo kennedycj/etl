@@ -15,6 +15,10 @@ def run_repo_script(script_relative: str, *, timeout: int = 300) -> str:
     if not script.is_file():
         return f"Missing script: {script}"
     env = os.environ.copy()
+    # If the archive is mounted in the gateway container but FINANCE_ARCHIVE_ROOT
+    # is unset, default to the mount path so analyze_*.py works.
+    if not env.get("FINANCE_ARCHIVE_ROOT") and Path("/data/finance_archive").is_dir():
+        env["FINANCE_ARCHIVE_ROOT"] = "/data/finance_archive"
     p = subprocess.run(
         [sys.executable, str(script)],
         capture_output=True,
